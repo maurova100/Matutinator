@@ -13,11 +13,12 @@ class RoutineAssistant:
         
         # Configuración inicial
         self.setup_symbols()
+        self.setup_holidays()
         self.setup_tasks()
         self.setup_autostart()
         
         # Variables de estado
-        self.completed = [False] * len(self.tasks)
+        self.completed = [False] * len(self.filtered_tasks)
         self.current_task = 0
         
         # Interfaz
@@ -34,43 +35,121 @@ class RoutineAssistant:
             self.check_symbol = "[X]"
             self.cross_symbol = "[ ]"
     
+    def setup_holidays(self):
+        """Configura días feriados (personaliza esta lista)"""
+        today = datetime.datetime.now()
+        year = today.year
+        self.holidays = [
+            datetime.date(year, 1, 1),    # Año Nuevo
+            datetime.date(year, 3, 24),   # Día Nacional de la Memoria
+            datetime.date(year, 4, 2),    # Día del Veterano
+            datetime.date(year, 5, 1),    # Día del Trabajador
+            datetime.date(year, 5, 25),   # Día de la Revolución de Mayo
+            datetime.date(year, 6, 20),   # Día de la Bandera
+            datetime.date(year, 7, 9),    # Día de la Independencia
+            datetime.date(year, 12, 8),   # Inmaculada Concepción
+            datetime.date(year, 12, 25)   # Navidad
+        ]
+    
+    def is_working_day(self, date):
+        """Determina si es día laboral (no fin de semana ni feriado)"""
+        if date.weekday() >= 5:  # Sábado (5) o Domingo (6)
+            return False
+        if date.date() in self.holidays:
+            return False
+        return True
+    
+    def next_working_day(self, date):
+        """Encuentra el próximo día laboral"""
+        next_day = date + datetime.timedelta(days=1)
+        while not self.is_working_day(next_day):
+            next_day += datetime.timedelta(days=1)
+        return next_day
+    
     def setup_tasks(self):
         """Define las tareas y sus acciones asociadas"""
-        self.tasks = [
-            "Chequear saldo YPF en Ruta y cargas observadas",
-            "Chequear cronograma de tareas CRER",
-            "Pagar Facturas y FR CUT del día",
-            "Revisar BandejaCO e imprmimir extracto",
-            "Revisar Outlook e imprimir extracto",
-            "Revisar WhatsApp",
-            "Actualizar cuardeno y organizar el día"
+        today = datetime.datetime.now()
+        day = today.day
+        is_quincenal_day = day in (1, 16) and self.is_working_day(today)
+        is_monthly_day = day == 1 and self.is_working_day(today)
+        
+        # Todas las tareas posibles (según tus especificaciones)
+        self.all_tasks = [
+            # Tareas diarias
+            {"task": "Chequear saldo YPF en Ruta y cargas observadas", "frequency": "daily"},
+            {"task": "Pagar Facturas y FR CUT del día", "frequency": "daily"},
+            {"task": "Revisar BandejaCO e imprimir extracto", "frequency": "daily"},
+            {"task": "Revisar Outlook e imprimir extracto", "frequency": "daily"},
+            {"task": "Revisar WhatsApp", "frequency": "daily"},
+            {"task": "Actualizar cuaderno y organizar el día", "frequency": "daily"},
+            
+            # Tareas quincenales (solo días 1 y 16 laborales)
+            {"task": "Enviar retenciones no CUT IVA-SUSS-Ganancias si corresponde", "frequency": "quincenal"},
+            {"task": "Recuperar retenciones no CUT ATER si corresponde", "frequency": "quincenal"},
+            {"task": "Chequear facturas de telefonía fija", "frequency": "quincenal"},
+            {"task": "Organizar temario y reunión de VT y RI si corresponde", "frequency": "quincenal"},
+            {"task": "Chequear cronograma de tareas CRER", "frequency": "quincenal"},
+            
+            # Tareas mensuales (solo día 1 laboral)
+            {"task": "Gestionar pago de servicio de limpieza", "frequency": "monthly"},
+            {"task": "Gestionar Pago de alquiler de dispensers", "frequency": "monthly"},
+            {"task": "Gestionar EE de descuentos de cuota alimentaria", "frequency": "monthly"},
+            {"task": "Iniciar NOTA de conciliación bancaria", "frequency": "monthly"},
+            {"task": "Iniciar EE de gastos bancarios", "frequency": "monthly"},
+            {"task": "Iniciar EE de pago de retenciones ATER", "frequency": "monthly"}
         ]
         
+        # Filtrar tareas según la fecha
+        self.filtered_tasks = [
+            t["task"] for t in self.all_tasks 
+            if (t["frequency"] == "daily") or 
+               (t["frequency"] == "quincenal" and is_quincenal_day) or
+               (t["frequency"] == "monthly" and is_monthly_day)
+        ]
+        
+        # Mensaje especial si es feriado o fin de semana
+        self.special_message = ""
+        if not self.is_working_day(today):
+            next_workday = self.next_working_day(today)
+            self.special_message = (
+                f"\n\nAVISO: Hoy es {'fin de semana' if today.weekday() >= 5 else 'feriado'}.\n"
+                f"Las tareas quincenales/mensuales se mostrarán el próximo día laboral ({next_workday.strftime('%d/%m')})."
+            )
+        
+        # Acciones asociadas a tareas (según tus especificaciones)
         self.task_actions = {
-            "Revisar Outlook e imprimir extracto": {
-                "type": "program",
-                "path": "outlook"  # Cambia esto según tu configuración
-            },
             "Chequear saldo YPF en Ruta y cargas observadas": {
                 "type": "url",
-                "path": "https://procesos.inta.gob.ar/portalprocesos#"  # Tu URL real aquí
-            },
-            "Chequear cronograma de tareas CRER": {
-                "type": "url",
-                "path": "https://docs.google.com/spreadsheets/d/1K9NmslL0RhEpz-td7BPfWnFMGPIoH3hxtRbTEIaW3hQ/edit?gid=915351991#gid=915351991"  # Tu URL real aquí
-            },
-            "Revisar BandejaCO e imprmimir extracto": {
-                "type": "url",
-                "path": "https://euc.gde.gob.ar/ccoo-web/"  # Tu URL real aquí
+                "path": "https://procesos.inta.gob.ar/portalprocesos#"
             },
             "Pagar Facturas y FR CUT del día": {
                 "type": "program",
-                "path": "C:\Program Files (x86)\EsigaIntaDesktop\EsigaIntaDesktop.exe"  # esiga
+                "path": r"C:\Program Files (x86)\EsigaIntaDesktop\EsigaIntaDesktop.exe"
+            },
+            "Revisar BandejaCO e imprimir extracto": {
+                "type": "url",
+                "path": "https://euc.gde.gob.ar/ccoo-web/"
+            },
+            "Revisar Outlook e imprimir extracto": {
+                "type": "program",
+                "path": "outlook"
             },
             "Revisar WhatsApp": {
                 "type": "url",
-                "path": "https://web.whatsapp.com/"  # esiga
-            }            
+                "path": "https://web.whatsapp.com/"
+            },            
+            "Organizar temario y reunión de VT y RI si corresponde": {
+                "type": "url",
+                "path": "https://docs.google.com/forms/d/12oKrn41VZgBKBjSs_Mdgei6PfIWwGTncGPak1YnFv20/edit?pli=1#response=ACYDBNgoPnbtExu642AvnBuRSFWRvnX2LjtGh9E2tc1M8LwTwc-uW5IgP1ubeQVfwwBlq-o"
+            },
+            "Chequear cronograma de tareas CRER": {
+                "type": "url",
+                "path": "https://docs.google.com/spreadsheets/d/1K9NmslL0RhEpz-td7BPfWnFMGPIoH3hxtRbTEIaW3hQ/edit?gid=915351991#gid=915351991"
+            },
+            "Iniciar NOTA de conciliación bancaria": {
+                "type": "url",
+                "path": "https://bee3.redlink.com.ar/bna3/bee/auth/login"
+            }
         }
     
     def setup_autostart(self):
@@ -103,6 +182,34 @@ class RoutineAssistant:
             fg='#2E7D32'
         ).pack(pady=10)
         
+        # Mostrar fecha actual
+        today = datetime.datetime.now().strftime("%A, %d/%m/%Y")
+        tk.Label(
+            main_frame,
+            text=f"Fecha: {today}",
+            font=('Arial', 10, 'bold')
+        ).pack()
+        
+        # Mostrar tipo de día
+        day_type = "Día laboral" if self.is_working_day(datetime.datetime.now()) else "Fin de semana/Feriado"
+        day_color = '#2E7D32' if self.is_working_day(datetime.datetime.now()) else '#D32F2F'
+        tk.Label(
+            main_frame,
+            text=f"Tipo de día: {day_type}",
+            font=('Arial', 10),
+            fg=day_color
+        ).pack()
+        
+        # Mensaje especial
+        if self.special_message:
+            tk.Label(
+                main_frame,
+                text=self.special_message,
+                font=('Arial', 9),
+                fg='#D32F2F',
+                justify=tk.LEFT
+            ).pack(pady=5)
+        
         # Contador de tareas
         self.counter_label = tk.Label(
             main_frame,
@@ -119,7 +226,7 @@ class RoutineAssistant:
             wraplength=500,
             justify=tk.LEFT
         )
-        self.task_label.pack(pady=20)
+        self.task_label.pack(pady=15)
         
         # Botón de acción (para programas/URLs)
         self.action_btn = tk.Button(
@@ -144,10 +251,10 @@ class RoutineAssistant:
         )
         self.complete_btn.pack(pady=10)
         
-        # Botón de reporte
+        # Botón de reporte simplificado
         self.report_btn = tk.Button(
             main_frame,
-            text="Generar Reporte",
+            text="Guardar Reporte",
             command=self.generate_report,
             bg='#2196F3',
             fg='white',
@@ -157,10 +264,10 @@ class RoutineAssistant:
     
     def show_task(self):
         """Muestra la tarea actual"""
-        if self.current_task < len(self.tasks):
-            task = self.tasks[self.current_task]
+        if self.current_task < len(self.filtered_tasks):
+            task = self.filtered_tasks[self.current_task]
             self.counter_label.config(
-                text=f"Tarea {self.current_task + 1} de {len(self.tasks)}")
+                text=f"Tarea {self.current_task + 1} de {len(self.filtered_tasks)}")
             self.task_label.config(text=task)
             
             # Habilitar botón de acción si hay una acción definida
@@ -182,7 +289,7 @@ class RoutineAssistant:
     
     def open_resource(self):
         """Abre el programa o URL asociada a la tarea actual"""
-        task = self.tasks[self.current_task]
+        task = self.filtered_tasks[self.current_task]
         if task in self.task_actions:
             action = self.task_actions[task]
             try:
@@ -194,33 +301,31 @@ class RoutineAssistant:
                 messagebox.showerror("Error", f"No se pudo abrir el recurso:\n{e}")
     
     def generate_report(self):
-        """Genera un reporte en formato Markdown"""
+        """Genera un reporte simple en formato TXT"""
         today = datetime.datetime.now().strftime("%Y-%m-%d")
-        time_now = datetime.datetime.now().strftime("%H:%M")
+        filename = f"Reporte_Tareas_{today.replace('-', '')}.txt"
         
-        report = f"# Reporte de tareas - {today}\n\n"
-        report += f"**Generado a las:** {time_now}\n\n"
-        report += "## Resumen\n\n"
-        
-        completed_count = sum(self.completed)
-        progress = int((completed_count / len(self.tasks)) * 100)
-        report += f"- **Tareas completadas:** {completed_count}/{len(self.tasks)}\n"
-        report += f"- **Progreso:** {progress}%\n\n"
-        
-        report += "## Detalle de tareas\n\n"
-        for i, task in enumerate(self.tasks):
-            status = self.check_symbol if self.completed[i] else self.cross_symbol
-            report += f"- {status} {task}\n"
-        
-        filename = f"Reporte_Tareas_{today.replace('-', '')}.md"
         try:
             with open(filename, 'w', encoding='utf-8') as f:
-                f.write(report)
+                f.write(f"Reporte de tareas - {today}\n")
+                f.write("="*30 + "\n\n")
+                
+                for i, task in enumerate(self.filtered_tasks):
+                    status = "COMPLETADA" if self.completed[i] else "PENDIENTE"
+                    f.write(f"{i+1}. {task} - {status}\n")
+                
+                f.write("\n")
+                completed_count = sum(self.completed)
+                total_tasks = len(self.filtered_tasks)
+                progress = int((completed_count / total_tasks) * 100) if total_tasks > 0 else 100
+                f.write(f"Progreso: {progress}% ({completed_count}/{total_tasks} tareas)\n")
+                
+                if self.special_message:
+                    f.write("\n" + self.special_message.replace('\n', ' ') + "\n")
             
-            if messagebox.askyesno(
-                "Reporte Generado",
-                f"Reporte guardado en:\n{os.path.abspath(filename)}\n\n¿Abrir archivo?"):
-                os.startfile(filename)
+            messagebox.showinfo(
+                "Reporte Guardado",
+                f"Se ha guardado el reporte en:\n{os.path.abspath(filename)}")
                 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar el reporte:\n{e}")
